@@ -5,13 +5,30 @@ Type definitions.
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import Any, Optional, Union
+
+from discord import Thread
+from discord.abc import GuildChannel, PrivateChannel, User
 
 
-class ChatRole(Enum):
-    """Role of a message in a chat conversation."""
+class ChatProvider(Enum, str):
+    discord = "discord"
 
-    USER = "user"
-    ASSISTANT = "assistant"
+
+class ModelCapabilities(Enum, str):
+    """LLM capabilities"""
+
+    tools = "tools"
+    vision = "vision"
+
+
+class ChatRole(Enum, str):
+    """Role of a message author in a chat conversation."""
+
+    user = "user"
+    assistant = "assistant"
+    system = "system"
+    tool = "tool"
 
 
 @dataclass
@@ -22,6 +39,7 @@ class ChatMessage:
     content: str
     timestamp: datetime
 
+
 @dataclass
 class DiscordMessage(ChatMessage):
     """Represents a Discord chat message"""
@@ -30,24 +48,35 @@ class DiscordMessage(ChatMessage):
     message_id: int
     image_attachments: list[bytes]
 
-@dataclass
-class OllamaRequest:
-    """Represents a request to process with Ollama."""
 
-    message: ChatMessage
+@dataclass
+class DiscordChatBotRequest:
+    """A request from a Discord chat."""
+
+    message: DiscordMessage
     history: list[ChatMessage]
 
 
 @dataclass
-class OllamaResponse:
-    """Represents a response from Ollama."""
+class DiscordBackgroundBotRequest:
+    """A request from a background task."""
 
-    content: str
-    request: OllamaRequest
+    channel: Optional[Union[GuildChannel, PrivateChannel, Thread]]
+    user: User
+    history: list[ChatMessage]
 
 
 @dataclass
-class OllamaError(OllamaResponse):
-    """Represents an error communicating with Ollama."""
+class DiscordChatBotResponse:
+    """Represents a response from the bot."""
 
-    error: object
+    content: str
+    request: DiscordChatBotRequest
+
+
+@dataclass
+class DiscordBackgroundBotResponse:
+    """Represents a response from the bot."""
+
+    content: str
+    request: DiscordBackgroundBotRequest

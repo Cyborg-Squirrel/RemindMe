@@ -1,8 +1,9 @@
 """Taskuccino Discord bot library."""
-from taskuccino._types import OllamaError, OllamaRequest, OllamaResponse
-from taskuccino.ai_response_cog import AiResponseCog
+
+from taskuccino._types import DiscordChatBotRequest, DiscordChatBotResponse
 from taskuccino.config import (BotConfig, Model, ModelsConfig, load_config,
                                load_system_prompt)
+from taskuccino.discord_response_cog import DiscordResponseCog
 from taskuccino.ollama_client import OllamaClient
 from taskuccino.ollama_processor import OllamaProcessor
 
@@ -14,8 +15,7 @@ __all__ = [
     "load_config",
     "load_system_prompt",
     "OllamaClient",
-    "AiResponseCog",
-    "OllamaRequest",
-    "OllamaResponse",
-    "OllamaError",
+    "DiscordResponseCog",
+    "DiscordChatBotRequest",
+    "DiscordChatBotResponse",
 ]

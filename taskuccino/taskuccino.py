@@ -1,16 +1,18 @@
 """A Discord chat bot powered by AI"""
 
 import multiprocessing as mp
+from datetime import datetime
 from typing import Optional
 
 import discord
 from discord.abc import Messageable
 from discord.ext import commands
 
-from taskuccino import (AiResponseCog, OllamaClient, load_config,
+from taskuccino import (DiscordResponseCog, OllamaClient, load_config,
                         load_system_prompt)
-from taskuccino._types import (ChatMessage, ChatRole, DiscordMessage,
-                               OllamaRequest)
+from taskuccino._types import (ChatMessage, ChatRole, DiscordChatBotRequest,
+                               DiscordMessage)
+from taskuccino.background_reminder_cog import BackgroundReminderCog
 from taskuccino.ollama_processor import OllamaProcessor
 
 intents = discord.Intents.default()
@@ -34,13 +36,22 @@ ollama_processor = OllamaProcessor(
     ollama_request_queue, ollama_response_queue, system_prompt, ollama_client
 )
 
+@bot.event
+async def on_guild_join(self, guild):
+    print(f"Joined guild {guild}")
+    bot.tree.copy_global_to(guild=guild)
+    await bot.tree.sync(guild=guild)
 
 @bot.event
 async def on_ready():
     """Called when the bot has successfully connected to Discord"""
     print(f"{bot.user} has connected to Discord!")
     print(f"Bot is in {len(bot.guilds)} guild(s)")
-    await bot.add_cog(AiResponseCog(bot, ollama_response_queue))
+    await bot.add_cog(DiscordResponseCog(bot, ollama_response_queue))
+    await bot.add_cog(BackgroundReminderCog(bot, ollama_request_queue))
+    for guild in bot.guilds:
+        bot.tree.copy_global_to(guild=guild)
+        await bot.tree.sync(guild=guild)
 
 
 async def on_bot_mentioned(message: discord.Message):
@@ -77,9 +88,9 @@ async def on_bot_mentioned(message: discord.Message):
             if len(history) < 20:
                 role: Optional[ChatRole] = None
                 if history_message.author == message.author:
-                    role = ChatRole.USER
+                    role = ChatRole.user
                 elif history_message.author == bot.user:
-                    role = ChatRole.ASSISTANT
+                    role = ChatRole.assistant
                 if role is not None:
                     history.append(
                         ChatMessage(
@@ -90,9 +101,9 @@ async def on_bot_mentioned(message: discord.Message):
                 break
 
     message_channel_id = message.channel.id  # type: ignore
-    ollama_request = OllamaRequest(
+    ollama_request = DiscordChatBotRequest(
         message=DiscordMessage(
-            ChatRole.USER,
+            ChatRole.user,
             message.content,
             message.created_at,
             message_channel_id,
@@ -111,7 +122,6 @@ async def on_message(message):
         return
 
     if isinstance(message.channel, discord.DMChannel):
-        # await on_bot_mentioned(message)
         bot.loop.create_task(on_bot_mentioned(message))
         return
 
@@ -121,24 +131,35 @@ async def on_message(message):
             await on_bot_mentioned(message)
 
 
+class ReminderSlashCommandOption(discord.Enum, str):
+    add = "add"
+    remove = "remove"
+    list = "list"
+
+
 @bot.tree.command()
 @discord.app_commands.describe(
-    member="""
-    The member you want to get the joined date from.
-    This defaults to the user who uses the command"""
+    option="""
+    Add, remove, or list all configured reminders.
+    """,
+    reminder="""The reminder to add or remove""",
 )
-async def joined(
-    interaction: discord.Interaction, member: Optional[discord.Member] = None
+async def reminder(
+    interaction: discord.Interaction,
+    option: Optional[ReminderSlashCommandOption],
+    reminder: Optional[str] = None,
 ):
-    """Says when a member joined."""
-    user = member or interaction.user
-    assert isinstance(user, discord.Member)
-    if user.joined_at is None:
-        await interaction.response.send_message(f"{user} has no join date.")
+    """Adds or removes a reminder"""
+    if option is None:
+        await interaction.response.send_message(f"An option is required.")
+    elif option == ReminderSlashCommandOption.list:
+        print(f"{option} {reminder}")
+        await interaction.response.send_message(f"TODO")
     else:
-        await interaction.response.send_message(
-            f"{user} joined {discord.utils.format_dt(user.joined_at)}"
-        )
+        if reminder is not None:
+            print(f"{option} {reminder}")
+            await interaction.response.send_message(f"{option} {reminder}")
+        await interaction.response.send_message(f"No reminder specified.")
 
 
 def main():
