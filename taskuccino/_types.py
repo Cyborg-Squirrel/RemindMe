@@ -44,6 +44,7 @@ class ChatMessage:
 class DiscordMessage(ChatMessage):
     """Represents a Discord chat message"""
 
+    user: User
     channel_id: int
     message_id: int
     image_attachments: list[bytes]

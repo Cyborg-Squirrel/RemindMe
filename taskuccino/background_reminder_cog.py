@@ -24,7 +24,7 @@ class BackgroundReminderCog(commands.Cog):
     async def my_task(self):
         """Background task that processes AI responses from the queue."""
         # TODO load guild or user from configured reminder
-        user = await self.bot.fetch_user(149341947474083840)
+        user = await self.bot.fetch_user(1)
         channel = await self.bot.create_dm(user)
         await self.bot.fetch_channel(1)
         await channel.send(f"{user.mention} test ping")

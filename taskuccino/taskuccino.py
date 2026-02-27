@@ -14,6 +14,7 @@ from taskuccino._types import (ChatMessage, ChatRole, DiscordChatBotRequest,
                                DiscordMessage)
 from taskuccino.background_reminder_cog import BackgroundReminderCog
 from taskuccino.ollama_processor import OllamaProcessor
+from taskuccino.reminder_repository import ReminderRepository
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -32,8 +33,10 @@ ollama_client = OllamaClient(
 ollama_request_queue = mp.Queue()
 ollama_response_queue = mp.Queue()
 
+reminder_repository = ReminderRepository()
+
 ollama_processor = OllamaProcessor(
-    ollama_request_queue, ollama_response_queue, system_prompt, ollama_client
+    ollama_request_queue, ollama_response_queue, system_prompt, ollama_client, reminder_repository
 )
 
 @bot.event
@@ -106,6 +109,7 @@ async def on_bot_mentioned(message: discord.Message):
             ChatRole.user,
             message.content,
             message.created_at,
+            message.author,
             message_channel_id,
             message.id,
             image_attachment_bytes,
