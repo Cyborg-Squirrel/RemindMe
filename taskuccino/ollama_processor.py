@@ -1,11 +1,10 @@
 import multiprocessing as mp
 import threading
-from datetime import datetime, timezone
-from time import sleep
-from typing import Callable
+import traceback
+from datetime import datetime
+from time import localtime, sleep, tzname
 
 from discord import Optional
-from discord.abc import Snowflake, User
 
 from taskuccino._types import (ChatProvider, ChatRole,
                                DiscordBackgroundBotRequest,
@@ -13,7 +12,7 @@ from taskuccino._types import (ChatProvider, ChatRole,
                                DiscordChatBotRequest, DiscordChatBotResponse)
 from taskuccino.ollama_client import (OllamaClient, OllamaTool,
                                       OllamaToolParameter)
-from taskuccino.reminder_repository import ReminderRepository
+from taskuccino.task_repository import TaskRepository
 
 
 class OllamaProcessor:  # pylint: disable=too-few-public-methods
@@ -25,16 +24,22 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
         response_queue: mp.Queue,
         system_prompt: str,
         ollama_client: OllamaClient,
-        reminder_repository: ReminderRepository,
+        task_repository: TaskRepository,
     ):
         self.request_queue = request_queue
         self.response_queue = response_queue
         self.system_prompt = system_prompt
         self.ollama_client = ollama_client
-        self.reminder_repository = reminder_repository
+        self.task_repository = task_repository
 
     def _system_prompt_message(self) -> list[dict]:
-        return [{"role": ChatRole.system.value, "content": self.system_prompt}]
+        return [
+            {"role": ChatRole.system.value, "content": self.system_prompt},
+            {
+                "role": ChatRole.system.value,
+                "content": f"The system timezone configuration is {self._get_timezone()}",
+            },
+        ]
 
     def start(self) -> threading.Thread:
         t = threading.Thread(target=self._process_messages)
@@ -62,11 +67,13 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
 
         return image_descriptions
 
-    def _ping_user(self, reminder_id, message):
+    def _ping_user(self, task_id, message):
         self.response_queue.put(message)
-        self.reminder_repository.update_reminder(
-            reminder_id, updated_at=datetime.now()
-        )
+        self.task_repository.update_task(task_id, updated_at=datetime.now())
+
+    def _get_timezone(self) -> str:
+        isdst = localtime().tm_isdst
+        return tzname[isdst]
 
     def _create_tools(
         self,
@@ -79,23 +86,23 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
             OllamaTool(
                 "current_time",
                 "Gets the current system time",
-                lambda: datetime.now(timezone.utc).isoformat(),
+                lambda: datetime.now().isoformat(),
             ),
             OllamaTool(
-                "add_reminder",
-                "Adds a reminder to storage",
-                lambda reminder, due_date: self.reminder_repository.add_reminder(
+                "new_task",
+                "Creates a new task",
+                lambda task, due_date: self.task_repository.add_task(
                     chat_provider,
                     str(user_id),
                     str(channel_id) if channel_id is not None else None,
-                    reminder,
+                    task,
                     due_date,
                 ),
                 parameters=[
                     OllamaToolParameter(
-                        "reminder",
+                        "task",
                         "string",
-                        "The reminder text",
+                        "The task text",
                         True,
                     ),
                     OllamaToolParameter(
@@ -106,25 +113,19 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
                 ],
             ),
             OllamaTool(
-                "get_reminders",
-                "Retrieves all reminders for a user",
-                lambda: self.reminder_repository.get_reminders_by_user(
-                    str(user_id)
-                ),
+                "get_tasks",
+                "Retrieves all tasks for a user",
+                lambda: self.task_repository.get_tasks_by_user(str(user_id)),
             ),
             OllamaTool(
-                "modify_reminder",
-                "Modifies an existing reminder",
-                lambda id, reminder, due_date: self.reminder_repository.update_reminder(
-                    id, reminder=reminder, due_date=due_date
+                "update_task",
+                "Updates a task",
+                lambda id, task, due_date: self.task_repository.update_task(
+                    id, task=task, due_date=due_date
                 ),
                 parameters=[
-                    OllamaToolParameter(
-                        "id", "string", "The reminder ID", True
-                    ),
-                    OllamaToolParameter(
-                        "reminder", "string", "The reminder text"
-                    ),
+                    OllamaToolParameter("id", "string", "The task ID", True),
+                    OllamaToolParameter("task", "string", "The task text"),
                     OllamaToolParameter(
                         "due_date",
                         "string",
@@ -133,15 +134,13 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
                 ],
             ),
             OllamaTool(
-                "complete_reminder",
-                "Marks a reminder as completed",
-                lambda id: self.reminder_repository.update_reminder(
+                "complete_task",
+                "Marks a task as completed",
+                lambda id: self.task_repository.update_task(
                     id, completed_at=datetime.now().isoformat()
                 ),
                 parameters=[
-                    OllamaToolParameter(
-                        "id", "string", "The reminder ID", True
-                    ),
+                    OllamaToolParameter("id", "string", "The task ID", True),
                 ],
             ),
         ]
@@ -179,7 +178,8 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
 
                 self.response_queue.put(response)
             except Exception as e:  # pylint: disable=broad-exception-caught
-                print(f"Got error while doing background task {e}")
+                print(f"Got error while processing request {e}")
+                traceback.print_exc()
                 if isinstance(ollama_request, DiscordChatBotRequest):
                     error_response = DiscordChatBotResponse(
                         str(e), ollama_request
@@ -222,7 +222,7 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
             ChatProvider.discord,
         )
         chat_response = self.ollama_client.chat_with_tools(
-            messages=self._system_prompt_message(), tools=tools
+            messages=messages, tools=tools
         )
         return chat_response.message.content or ""
 
@@ -238,9 +238,7 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
                 "Sends a notification to the user",
                 lambda id, message: self._ping_user(id, message),
                 parameters=[
-                    OllamaToolParameter(
-                        "id", "string", "The reminder ID", True
-                    ),
+                    OllamaToolParameter("id", "string", "The task ID", True),
                     OllamaToolParameter(
                         "message",
                         "string",
@@ -254,11 +252,11 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
         messages.append(
             {
                 "role": ChatRole.system.value,
-                "content": "Use the available tools to process the user's reminders. Make sure to only notify the user if it is necessary.",
+                "content": "Use the available tools to process the user's tasks. Make sure to only notify the user if it is necessary.",
             }
         )
 
         chat_response = self.ollama_client.chat_with_tools(
-            messages=self._system_prompt_message(), tools=tools
+            messages=messages, tools=tools
         )
         return chat_response.message.content or ""

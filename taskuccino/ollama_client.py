@@ -139,11 +139,10 @@ class OllamaClient:
         Send a chat request to the Ollama model. Tools are required.
         """
         model = self._get_model_for_capability("tools")
-        print(
-            f'Using model {model} to fulfil chat request {messages[-1]["content"]}'
-        )
+        # print(
+        #     f'Using model {model} to fulfil chat request {messages[-1]["content"]}'
+        # )
         tool_definitions = [t.to_dict() for t in tools]
-        print(f"tool_definitions {tool_definitions}")
         response = self.client.chat(
             model=model, messages=messages, tools=tool_definitions, think='high'
         )
