@@ -84,7 +84,6 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
             OllamaTool(
                 "add_reminder",
                 "Adds a reminder to storage",
-                # lambda reminder, due_date: ,
                 lambda reminder, due_date: self.reminder_repository.add_reminder(
                     chat_provider,
                     str(user_id),
