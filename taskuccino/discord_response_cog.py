@@ -1,6 +1,7 @@
 """AI response cog for Discord bot."""
 import multiprocessing as mp
 
+from discord import Optional
 from discord.abc import Messageable
 from discord.ext import commands, tasks
 
@@ -29,17 +30,17 @@ class DiscordResponseCog(commands.Cog):
         bot_response = self.queue.get_nowait()
         users_message = None
         users_channel = None
-        user = None
+        user_id: Optional[int] = None
         if isinstance(bot_response, DiscordChatBotResponse):
             for msg in self.bot.cached_messages:
                 if msg.id == bot_response.request.message.message_id:
                     users_message = msg
                     break
         elif isinstance(bot_response, DiscordBackgroundBotResponse):
-            if bot_response.request.channel is not None:
-                users_channel = bot_response.request.channel
-            if bot_response.request.user is not None:
-                user = bot_response.request.user
+            if bot_response.request.channel_id is not None:
+                users_channel = bot_response.request.channel_id
+            if bot_response.request.user_id is not None:
+                user_id = bot_response.request.user_id
 
         if users_message is not None:
             # Discord has a max message length of 2000 characters, split if needed
@@ -53,7 +54,8 @@ class DiscordResponseCog(commands.Cog):
                 response_chunk = bot_response.content[start:end]
                 if users_message is not None:
                     await users_message.reply(response_chunk)
-                elif isinstance(users_channel, Messageable) and user is not None:
+                elif isinstance(users_channel, Messageable) and isinstance(user_id, int):
+                    user = await self.bot.fetch_user(user_id)
                     await users_channel.send(f"{user.mention} {response_chunk}")
                 start = end
                 end = start + 2000

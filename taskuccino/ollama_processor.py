@@ -1,9 +1,10 @@
 import multiprocessing as mp
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from time import sleep
 from typing import Callable
 
+from discord import Optional
 from discord.abc import Snowflake, User
 
 from taskuccino._types import (ChatProvider, ChatRole,
@@ -61,26 +62,33 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
 
         return image_descriptions
 
+    def _ping_user(self, reminder_id, message):
+        self.response_queue.put(message)
+        self.reminder_repository.update_reminder(
+            reminder_id, updated_at=datetime.now()
+        )
+
     def _create_tools(
         self,
-        user: User,
-        channel_id,
+        user_id: int,
+        channel_id: Optional[int],
         chat_provider: ChatProvider,
     ):
         """Create the shared set of tools."""
         return [
             OllamaTool(
-                "ping_user",
-                "Sends a notification to the user",
-                lambda message: self.response_queue.put(message),
+                "current_time",
+                "Gets the current system time",
+                lambda: datetime.now(timezone.utc).isoformat(),
             ),
             OllamaTool(
                 "add_reminder",
                 "Adds a reminder to storage",
+                # lambda reminder, due_date: ,
                 lambda reminder, due_date: self.reminder_repository.add_reminder(
                     chat_provider,
-                    str(user.id),
-                    channel_id,
+                    str(user_id),
+                    str(channel_id) if channel_id is not None else None,
                     reminder,
                     due_date,
                 ),
@@ -102,7 +110,7 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
                 "get_reminders",
                 "Retrieves all reminders for a user",
                 lambda: self.reminder_repository.get_reminders_by_user(
-                    str(user.id)
+                    str(user_id)
                 ),
             ),
             OllamaTool(
@@ -172,12 +180,12 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
 
                 self.response_queue.put(response)
             except Exception as e:  # pylint: disable=broad-exception-caught
+                print(f"Got error while doing background task {e}")
                 if isinstance(ollama_request, DiscordChatBotRequest):
                     error_response = DiscordChatBotResponse(
                         str(e), ollama_request
                     )
                 else:
-                    print(f"Got error while doing background task {e}")
                     error_response = DiscordBackgroundBotResponse(
                         str(e), ollama_request
                     )
@@ -209,19 +217,47 @@ class OllamaProcessor:  # pylint: disable=too-few-public-methods
             }
         )
 
-        
-        tools = self._create_tools(request.message.user, request.message.channel_id, ChatProvider.discord)
-        chat_response = self.ollama_client.chat_with_tools(messages=self._system_prompt_message(), tools=tools)
+        tools = self._create_tools(
+            request.message.user_id,
+            request.message.channel_id,
+            ChatProvider.discord,
+        )
+        chat_response = self.ollama_client.chat_with_tools(
+            messages=self._system_prompt_message(), tools=tools
+        )
         return chat_response.message.content or ""
 
     def _handle_background_request(
         self, request: DiscordBackgroundBotRequest
     ) -> str:
-        user = request.user
-        channel = request.channel
-        channel_id = channel.id if channel is Snowflake else None
-
-        tools = self._create_tools(user, channel_id, ChatProvider.discord)
+        tools = self._create_tools(
+            request.user_id, request.channel_id, ChatProvider.discord
+        )
+        tools.append(
+            OllamaTool(
+                "ping_user",
+                "Sends a notification to the user",
+                lambda id, message: self._ping_user(id, message),
+                parameters=[
+                    OllamaToolParameter(
+                        "id", "string", "The reminder ID", True
+                    ),
+                    OllamaToolParameter(
+                        "message",
+                        "string",
+                        "The message to send to the user",
+                        True,
+                    ),
+                ],
+            ),
+        )
+        messages = self._system_prompt_message()
+        messages.append(
+            {
+                "role": ChatRole.system.value,
+                "content": "Use the available tools to process the user's reminders. Make sure to only notify the user if it is necessary.",
+            }
+        )
 
         chat_response = self.ollama_client.chat_with_tools(
             messages=self._system_prompt_message(), tools=tools

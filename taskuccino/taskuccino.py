@@ -109,7 +109,7 @@ async def on_bot_mentioned(message: discord.Message):
             ChatRole.user,
             message.content,
             message.created_at,
-            message.author,
+            message.author.id,
             message_channel_id,
             message.id,
             image_attachment_bytes,

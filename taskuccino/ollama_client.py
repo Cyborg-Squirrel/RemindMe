@@ -14,7 +14,9 @@ class OllamaToolParameter:
     Dataclass for Ollama tool parameters
     """
 
-    def __init__(self, name: str, type: str, description: str, required: bool = False):
+    def __init__(
+        self, name: str, type: str, description: str, required: bool = False
+    ):
         self.name = name
         self.type = type
         self.description = description
@@ -76,7 +78,9 @@ class OllamaTool:
                     "properties": {
                         p.name: p.to_dict() for p in self.parameters
                     },
-                    "required": [p.name for p in self.parameters if p.isRequired]
+                    "required": [
+                        p.name for p in self.parameters if p.isRequired
+                    ],
                 },
             },
         }
@@ -129,37 +133,49 @@ class OllamaClient:
         raise RuntimeError(f"No model found with capability: {capability}")
 
     def chat_with_tools(
-        self,
-        messages: list,
-        tools: list[OllamaTool]
+        self, messages: list, tools: list[OllamaTool]
     ) -> ChatResponse:
         """
         Send a chat request to the Ollama model. Tools are required.
         """
         model = self._get_model_for_capability("tools")
         print(
-            f'Using model {model} to fulfil chat request {messages[-1]["content"]} with tools'
+            f'Using model {model} to fulfil chat request {messages[-1]["content"]}'
         )
         tool_definitions = [t.to_dict() for t in tools]
-        response = self.client.chat(model=model, messages=messages, tools=tool_definitions)
+        print(f"tool_definitions {tool_definitions}")
+        response = self.client.chat(
+            model=model, messages=messages, tools=tool_definitions
+        )
 
-        do_followup_chat = False
-        if response.message.tool_calls:
-            for called_tool in response.message.tool_calls:
-                matching_tool = lambda tools: next((t for t in tools if t.name == called_tool.function.name), None)
-                if matching_tool is not None:
-                    do_followup_chat = True
-                    output = matching_tool(**called_tool.function.arguments)
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "content": str(output),
-                            "tool_name": called_tool.function.name,
-                        }
+        do_followup_chat = True
+        while do_followup_chat:
+            # Reset to false
+            do_followup_chat = False
+            if response.message.tool_calls:
+                for called_tool in response.message.tool_calls:
+                    matching_tool = lambda tools: next(
+                        (
+                            t
+                            for t in tools
+                            if t.name == called_tool.function.name
+                        ),
+                        None,
                     )
+                    if matching_tool is not None:
+                        do_followup_chat = True
+                        print(f"Tool callback {called_tool}")
+                        output = matching_tool(**called_tool.function.arguments)
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "content": str(output),
+                                "tool_name": called_tool.function.name,
+                            }
+                        )
 
-        if do_followup_chat:
-            response = self.client.chat(model=model, messages=messages)
+            if do_followup_chat:
+                response = self.client.chat(model=model, messages=messages)
         return response
 
     def generate(

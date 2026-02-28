@@ -8,21 +8,21 @@ from enum import Enum
 from typing import Any, Optional, Union
 
 from discord import Thread
-from discord.abc import GuildChannel, PrivateChannel, User
+from discord.abc import GuildChannel, PrivateChannel, Snowflake, User
 
 
-class ChatProvider(Enum, str):
+class ChatProvider(str, Enum):
     discord = "discord"
 
 
-class ModelCapabilities(Enum, str):
+class ModelCapabilities(str, Enum):
     """LLM capabilities"""
 
     tools = "tools"
     vision = "vision"
 
 
-class ChatRole(Enum, str):
+class ChatRole(str, Enum):
     """Role of a message author in a chat conversation."""
 
     user = "user"
@@ -44,7 +44,7 @@ class ChatMessage:
 class DiscordMessage(ChatMessage):
     """Represents a Discord chat message"""
 
-    user: User
+    user_id: int
     channel_id: int
     message_id: int
     image_attachments: list[bytes]
@@ -62,8 +62,8 @@ class DiscordChatBotRequest:
 class DiscordBackgroundBotRequest:
     """A request from a background task."""
 
-    channel: Optional[Union[GuildChannel, PrivateChannel, Thread]]
-    user: User
+    channel_id: Optional[int]
+    user_id: int
     history: list[ChatMessage]
 
 

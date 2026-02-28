@@ -20,13 +20,13 @@ class BackgroundReminderCog(commands.Cog):
     async def cog_unload(self):
         self.my_task.stop()
 
-    @tasks.loop(minutes=5)
+    @tasks.loop(minutes=15)
     async def my_task(self):
         """Background task that processes AI responses from the queue."""
         # TODO load guild or user from configured reminder
-        user = await self.bot.fetch_user(1)
-        channel = await self.bot.create_dm(user)
-        await self.bot.fetch_channel(1)
-        await channel.send(f"{user.mention} test ping")
-        request = DiscordBackgroundBotRequest(None, user, [])
-        self.request_queue.put(request)
+        # user = await self.bot.fetch_user(1)
+        # channel = await self.bot.create_dm(user)
+        # await self.bot.fetch_channel(1)
+        # await channel.send(f"{user.mention} test ping")
+        # request = DiscordBackgroundBotRequest(None, user.id, [])
+        # self.request_queue.put(request)
