@@ -145,7 +145,7 @@ class OllamaClient:
         tool_definitions = [t.to_dict() for t in tools]
         print(f"tool_definitions {tool_definitions}")
         response = self.client.chat(
-            model=model, messages=messages, tools=tool_definitions
+            model=model, messages=messages, tools=tool_definitions, think='high'
         )
 
         do_followup_chat = True
@@ -154,18 +154,14 @@ class OllamaClient:
             do_followup_chat = False
             if response.message.tool_calls:
                 for called_tool in response.message.tool_calls:
-                    matching_tool = lambda tools: next(
-                        (
-                            t
-                            for t in tools
-                            if t.name == called_tool.function.name
-                        ),
-                        None,
-                    )
+                    matching_tool = None
+                    for tool in tools:
+                        if tool.name == called_tool.function.name:
+                            matching_tool = tool
                     if matching_tool is not None:
                         do_followup_chat = True
                         print(f"Tool callback {called_tool}")
-                        output = matching_tool(**called_tool.function.arguments)
+                        output = matching_tool.callback(**called_tool.function.arguments)
                         messages.append(
                             {
                                 "role": "tool",
@@ -175,7 +171,7 @@ class OllamaClient:
                         )
 
             if do_followup_chat:
-                response = self.client.chat(model=model, messages=messages)
+                response = self.client.chat(model=model, messages=messages, think='high')
         return response
 
     def generate(
