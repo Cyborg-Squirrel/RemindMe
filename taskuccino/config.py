@@ -33,9 +33,10 @@ class BotConfig:
     models: Optional[ModelsConfig]
     reaction_emoji: str
     react_to_messages: bool
+    workspace: Path
 
 
-DEFAULT_CONFIG = BotConfig("", "http://localhost:11434", None, "👋", True)
+DEFAULT_CONFIG = BotConfig("", "http://localhost:11434", None, "👋", True, Path("./workspace"))
 
 
 def load_system_prompt() -> str:
@@ -56,6 +57,14 @@ def load_system_prompt() -> str:
         return DEFAULT_CONFIG.__doc__ or ""
 
 
+def _is_valid_path(path_str):
+    p = Path(path_str)
+    try:
+        p.resolve(strict=False)
+    except OSError:
+        return False
+    return True
+
 def load_config() -> BotConfig:
     """Load configuration from config.json."""
     if not CONFIG_FILE.exists():
@@ -70,6 +79,15 @@ def load_config() -> BotConfig:
             config_data = json.load(f)
 
         models = _load_models(config_data.get("models", DEFAULT_CONFIG.models))
+        workspace_string = config_data.get("workspace", "./workspace")
+        workspace: Path
+        if _is_valid_path(workspace_string):
+            workspace = Path(workspace_string)
+            if not workspace.exists():
+                workspace.mkdir(parents=True, exist_ok=True)
+        else:
+            raise Exception(f'{workspace_string} is an invalid workspace directory!')
+
         config = BotConfig(
             token=config_data.get("token", DEFAULT_CONFIG.token),
             api_url=config_data.get("api_url", DEFAULT_CONFIG.api_url),
@@ -80,6 +98,7 @@ def load_config() -> BotConfig:
             react_to_messages=config_data.get(
                 "react_to_messages", DEFAULT_CONFIG.react_to_messages
             ),
+            workspace=workspace
         )
 
         return config
