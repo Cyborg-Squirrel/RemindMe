@@ -33,7 +33,7 @@ ollama_client = OllamaClient(
 ollama_request_queue = mp.Queue()
 ollama_response_queue = mp.Queue()
 
-reminder_repository = TaskRepository()
+reminder_repository = TaskRepository(bot_config.workspace)
 
 ollama_processor = OllamaProcessor(
     ollama_request_queue, ollama_response_queue, system_prompt, ollama_client, reminder_repository

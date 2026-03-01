@@ -28,7 +28,7 @@ class task:
 class TaskRepository:
     """Repository for managing tasks with JSON file persistence."""
 
-    def __init__(self, file_path: Optional[Path] = None):
+    def __init__(self, workspace: Optional[Path] = None):
         """
         Initialize the task repository.
 
@@ -36,15 +36,19 @@ class TaskRepository:
             file_path: Path to the JSON file for storing tasks.
                       Defaults to taskuccino/tasks.json
         """
-        if file_path is None:
-            file_path = Path(__file__).parent / "tasks.json"
-        self.file_path = file_path
+        file_name = 'tasks.json'
+        if workspace is None:
+            self.file_path = Path(__file__).parent / file_name
+        else:
+            self.file_path = workspace / file_name
         self.tasks: List[task] = []
 
     def load(self) -> None:
         """Load tasks from the JSON file."""
         if not self.file_path.exists():
             self.tasks = []
+            # Create json file with empty list of tasks
+            self.save_to_file()
             return
 
         try:

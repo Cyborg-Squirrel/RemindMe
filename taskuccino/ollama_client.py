@@ -5,6 +5,7 @@ from typing import Callable, Optional
 
 from ollama import ChatResponse, Client, GenerateResponse
 
+from taskuccino._types import ChatRole
 from taskuccino.config import ModelsConfig
 
 
@@ -139,12 +140,9 @@ class OllamaClient:
         Send a chat request to the Ollama model. Tools are required.
         """
         model = self._get_model_for_capability("tools")
-        # print(
-        #     f'Using model {model} to fulfil chat request {messages[-1]["content"]}'
-        # )
         tool_definitions = [t.to_dict() for t in tools]
         response = self.client.chat(
-            model=model, messages=messages, tools=tool_definitions, think='high'
+            model=model, messages=messages, tools=tool_definitions
         )
 
         do_followup_chat = True
@@ -160,17 +158,19 @@ class OllamaClient:
                     if matching_tool is not None:
                         do_followup_chat = True
                         print(f"Tool callback {called_tool}")
-                        output = matching_tool.callback(**called_tool.function.arguments)
+                        output = matching_tool.callback(
+                            **called_tool.function.arguments
+                        )
                         messages.append(
                             {
-                                "role": "tool",
+                                "role": ChatRole.tool.value,
                                 "content": str(output),
                                 "tool_name": called_tool.function.name,
                             }
                         )
 
             if do_followup_chat:
-                response = self.client.chat(model=model, messages=messages, think='high')
+                response = self.client.chat(model=model, messages=messages)
         return response
 
     def generate(
